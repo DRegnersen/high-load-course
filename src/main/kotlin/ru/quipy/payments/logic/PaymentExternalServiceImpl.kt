@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import org.slf4j.LoggerFactory
+import ru.quipy.common.utils.CustomTokenBucketRateLimiter
 import ru.quipy.common.utils.LeakingBucketRateLimiter
 import ru.quipy.core.EventSourcingService
 import ru.quipy.payments.api.PaymentAggregate
@@ -55,8 +56,8 @@ class PaymentExternalSystemAdapterImpl(
         }
     }
 
-    private suspend fun processPayment(paymentId: UUID, amount: Int, paymentStartedAt: Long, deadline: Long) {
-        val success = rateLimiter.tickBlocking(Duration.ofMillis(500))
+    private fun processPayment(paymentId: UUID, amount: Int, paymentStartedAt: Long, deadline: Long) {
+        val success = rateLimiter.tick()
 
         if (!success) {
             logger.warn("[$accountName] Payment $paymentId delayed due to rate limit")
