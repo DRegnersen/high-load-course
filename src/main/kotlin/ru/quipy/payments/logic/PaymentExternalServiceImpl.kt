@@ -7,12 +7,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import org.slf4j.LoggerFactory
-import ru.quipy.common.utils.LeakingBucketRateLimiter
+import ru.quipy.common.utils.SlidingWindowRateLimiter
 import ru.quipy.core.EventSourcingService
 import ru.quipy.payments.api.PaymentAggregate
 import java.net.SocketTimeoutException
 import java.time.Duration
 import java.util.*
+import java.util.concurrent.Semaphore
 
 
 // Advice: always treat time as a Duration
@@ -34,13 +35,13 @@ class PaymentExternalSystemAdapterImpl(
 
     private val client = OkHttpClient.Builder().build()
 
-    private val rateLimiter = LeakingBucketRateLimiter(
+    private val rateLimiter = SlidingWindowRateLimiter(
         rate = rateLimitPerSec.toLong(),
-        window = Duration.ofSeconds(1),
-        bucketSize = parallelRequests * 2
+        window = Duration.ofMillis(500)
     )
 
-    private val deferredQueue = LinkedList<suspend () -> Unit>()
+    private val parallelRequestsSemaphore = Semaphore(parallelRequests)
+
     private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun performPaymentAsync(paymentId: UUID, amount: Int, paymentStartedAt: Long, deadline: Long) {
@@ -50,14 +51,6 @@ class PaymentExternalSystemAdapterImpl(
     }
 
     private suspend fun performPaymentCore(paymentId: UUID, amount: Int, paymentStartedAt: Long, deadline: Long) {
-        val success = rateLimiter.tickBlocking(Duration.ofMillis(500))
-
-        if (!success) {
-            logger.warn("[$accountName] Payment $paymentId delayed due to rate limit")
-            deferredQueue.add { performPaymentCore(paymentId, amount, paymentStartedAt, deadline) }
-            return
-        }
-
         val transactionId = UUID.randomUUID()
         logger.info("[$accountName] Processing payment: $paymentId, txId: $transactionId")
 
@@ -72,10 +65,19 @@ class PaymentExternalSystemAdapterImpl(
             post(emptyBody)
         }.build()
 
+        if (!rateLimiter.tick()) {
+            logger.warn("[$accountName] Payment $paymentId delayed due to rate limit")
+            rateLimiter.tickBlocking()
+        }
+
+        withContext(Dispatchers.IO) {
+            parallelRequestsSemaphore.acquire()
+        }
+
         try {
             retry(
-                times = 2,
-                initialDelay = 30,
+                times = 4,
+                initialDelay = 20,
                 factor = 2.0,
                 deadline = deadline,
                 shouldRetry = { response -> !response.result }
@@ -99,6 +101,8 @@ class PaymentExternalSystemAdapterImpl(
                     }
                 }
             }
+        } finally {
+            parallelRequestsSemaphore.release()
         }
     }
 
@@ -124,7 +128,7 @@ class PaymentExternalSystemAdapterImpl(
     }
 
     private suspend fun <T> retry(
-        times: Int = 2,
+        times: Int = 1,
         initialDelay: Long = 100,
         maxDelay: Long = 1000,
         factor: Double = 1.0,
@@ -134,7 +138,7 @@ class PaymentExternalSystemAdapterImpl(
     ): T {
         var currentDelay = initialDelay
 
-        repeat(times - 1) { attempt ->
+        repeat(times) { attempt ->
             val result = block()
 
             if (!shouldRetry(result))
@@ -151,7 +155,7 @@ class PaymentExternalSystemAdapterImpl(
             currentDelay = (currentDelay * factor).toLong().coerceAtMost(maxDelay)
         }
 
-        return block() // Последняя попытка
+        return block() // last attempt
     }
 
     override fun price() = properties.price
