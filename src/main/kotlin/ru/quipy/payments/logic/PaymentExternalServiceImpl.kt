@@ -143,6 +143,7 @@ class PaymentExternalSystemAdapterImpl(
     private fun executePaymentRequest(request: Request, transactionId: UUID, paymentId: UUID): CompletableFuture<ExternalSysResponse> {
         val f = CompletableFuture<ExternalSysResponse>()
 
+
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 logger.error("[$accountName] [ERROR] Request failed for payment: $paymentId, reason: ${e.message}")
