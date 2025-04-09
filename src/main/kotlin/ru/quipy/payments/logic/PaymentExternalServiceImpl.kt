@@ -46,9 +46,12 @@ class PaymentExternalSystemAdapterImpl(
         .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
         .connectionPool(ConnectionPool(350, 300000, TimeUnit.MILLISECONDS))
         .dispatcher(Dispatcher().apply {
-            maxRequests =  1000
-            maxRequestsPerHost = 1000
+            maxRequests =  1500
+            maxRequestsPerHost = 1500
         })
+        .readTimeout(Duration.ofMillis(30000))
+        .writeTimeout(Duration.ofMillis(30000))
+        .callTimeout(Duration.ofMillis(120000))
         .build()
 
     private val rateLimiter = SlidingWindowRateLimiter(
@@ -57,7 +60,7 @@ class PaymentExternalSystemAdapterImpl(
     )
 
     private val pool = ThreadPoolExecutor(
-        500, // corePoolSize
+        750, // corePoolSize
         1000, // maximumPoolSize
         threadPoolPolicy.keepAliveTime.toMillis(), // keepAliveTime
         TimeUnit.MILLISECONDS, // time unit for keepAliveTime
