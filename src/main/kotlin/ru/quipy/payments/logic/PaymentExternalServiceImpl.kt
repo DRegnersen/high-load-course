@@ -6,6 +6,7 @@ import kotlinx.coroutines.*
 import okhttp3.*
 import org.slf4j.LoggerFactory
 import ru.quipy.common.utils.SlidingWindowRateLimiter
+import ru.quipy.common.utils.retryAsync
 import ru.quipy.core.EventSourcingService
 import ru.quipy.payments.api.PaymentAggregate
 import java.io.IOException
@@ -110,10 +111,10 @@ class PaymentExternalSystemAdapterImpl(
             }
 
             try {
-                retry(
+                retryAsync(
                     retryPolicy,
                     deadline,
-                    shouldRetry = { response -> !response.isDone }
+                    shouldRetry = { !it.result }
                 ) {
                     executePaymentRequest(request, transactionId, paymentId)
                 }
@@ -143,7 +144,6 @@ class PaymentExternalSystemAdapterImpl(
     private fun executePaymentRequest(request: Request, transactionId: UUID, paymentId: UUID): CompletableFuture<ExternalSysResponse> {
         val f = CompletableFuture<ExternalSysResponse>()
 
-
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 logger.error("[$accountName] [ERROR] Request failed for payment: $paymentId, reason: ${e.message}")
@@ -171,73 +171,6 @@ class PaymentExternalSystemAdapterImpl(
             }
         })
         return f
-    }
-
-//        client.newCall(request).execute().use { response ->
-//            val body = try {
-//                mapper.readValue(response.body?.string(), ExternalSysResponse::class.java)
-//            } catch (e: Exception) {
-//                logger.error("[$accountName] [ERROR] Payment processed for txId: $transactionId, payment: $paymentId, result code: ${response.code}, reason: ${response.body?.string()}")
-//                ExternalSysResponse(transactionId.toString(), paymentId.toString(), false, e.message)
-//            }
-//
-//            logger.warn("[$accountName] Payment processed for txId: $transactionId, payment: $paymentId, succeeded: ${body.result}, message: ${body.message}")
-//
-//            // Здесь мы обновляем состояние оплаты в зависимости от результата в базе данных оплат.
-//            // Это требуется сделать ВО ВСЕХ ИСХОДАХ (успешная оплата / неуспешная / ошибочная ситуация)
-//            paymentESService.update(paymentId) {
-//                it.logProcessing(body.result, now(), transactionId, reason = body.message)
-//            }
-//
-//            return body
-//        }
-
-    private suspend fun <T> retry(
-        policy: RetryPolicy,
-        deadline: Long,
-        shouldRetry: (T) -> Boolean,
-        block: suspend () -> T
-    ): T{
-        return retry(
-            maxAttempts = policy.maxAttempts,
-            initialDelay = policy.initialDelay.toMillis(),
-            maxDelay = policy.maxDelay.toMillis(),
-            factor = policy.factor,
-            deadline,
-            shouldRetry,
-            block
-        )
-    }
-
-    private suspend fun <T> retry(
-        maxAttempts: Int = 2,
-        initialDelay: Long = 100,
-        maxDelay: Long = 1000,
-        factor: Double = 1.0,
-        deadline: Long,
-        shouldRetry: (T) -> Boolean,
-        block: suspend () -> T
-    ): T {
-        var currentDelay = initialDelay
-
-        repeat(maxAttempts - 1) { attempt ->
-            val result = block()
-
-            if (!shouldRetry(result))
-                return result
-
-            if (now() + currentDelay > deadline) {
-                logger.warn("[$accountName] Deadline exceeded, stopping payment retries.")
-                return result
-            }
-
-            logger.warn("[$accountName] Payment attempt ${attempt + 1} failed, retrying in $currentDelay ms...")
-
-            delay(currentDelay)
-            currentDelay = (currentDelay * factor).toLong().coerceAtMost(maxDelay)
-        }
-
-        return block() // last attempt
     }
 
     override fun price() = properties.price
