@@ -46,7 +46,7 @@ class PaymentExternalSystemAdapterImpl(
     private val client = HttpClient.newBuilder()
         .version(HttpClient.Version.HTTP_2)
         .executor(Executors.newFixedThreadPool(40))
-        .connectTimeout(Duration.ofMillis((properties.averageProcessingTime.toMillis() * 1.4).toLong()))
+        .connectTimeout(timeoutPolicy.connectTimeout)
         .priority(1)
         .build();
 
@@ -82,7 +82,7 @@ class PaymentExternalSystemAdapterImpl(
         }
 
         if (!parallelRequestsSemaphore.tryAcquire()) {
-            logger.error("[$accountName] [ERROR] Too many concurrent requests.")
+            logger.error("[$accountName] [ERROR] Too many parallel requests")
             return
         }
 

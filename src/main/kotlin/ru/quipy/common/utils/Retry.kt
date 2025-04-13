@@ -41,7 +41,7 @@ suspend fun <T> retry(
             return result
 
         if (now() + currentDelay > deadlineMillis) {
-            logger.warn("Deadline exceeded, stopping retries.")
+            logger.warn("Deadline exceeded, stopping retries")
             return result
         }
 

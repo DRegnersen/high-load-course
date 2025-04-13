@@ -32,7 +32,8 @@ class ResilienceBeans(
 
     private fun timeoutPolicy(): TimeoutPolicy {
         return TimeoutPolicy(
-            requestTimeout = resilienceProperties.getRequestTimeoutDuration()
+            requestTimeout = resilienceProperties.getRequestTimeoutDuration(),
+            connectTimeout = resilienceProperties.getConnectTimeoutDuration()
         )
     }
 
@@ -50,7 +51,8 @@ data class ResiliencePolicy(
 )
 
 data class TimeoutPolicy(
-    val requestTimeout: Duration?
+    val requestTimeout: Duration?,
+    val connectTimeout: Duration
 )
 
 data class RetryPolicy(
