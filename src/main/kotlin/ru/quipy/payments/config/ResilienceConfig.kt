@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Configuration
 import java.time.Duration
 
 @Configuration
-@EnableConfigurationProperties(ResilienceProperties::class, RateLimiterProperties::class, ThreadPoolProperties::class)
+@EnableConfigurationProperties(ResilienceProperties::class, RateLimiterProperties::class)
 class ResilienceConfig
 
 @ConstructorBinding
@@ -30,12 +30,4 @@ data class RateLimiterProperties(
     val window: Long = 1000,
 ) {
     fun getWindowDuration(): Duration = Duration.ofMillis(window)
-}
-
-@ConstructorBinding
-@ConfigurationProperties(prefix = "resilience.thread-pool")
-data class ThreadPoolProperties(
-    val keepAliveTime: Long = 300000,
-) {
-    fun getKeepAliveTimeDuration(): Duration = Duration.ofMillis(keepAliveTime)
 }

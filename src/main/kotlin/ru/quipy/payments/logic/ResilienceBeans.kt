@@ -4,14 +4,12 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import ru.quipy.payments.config.RateLimiterProperties
 import ru.quipy.payments.config.ResilienceProperties
-import ru.quipy.payments.config.ThreadPoolProperties
 import java.time.Duration
 
 @Configuration
 class ResilienceBeans(
     private val resilienceProperties: ResilienceProperties,
-    private val rateLimiterProperties: RateLimiterProperties,
-    private val threadPoolProperties: ThreadPoolProperties
+    private val rateLimiterProperties: RateLimiterProperties
 ) {
 
     @Bean
@@ -19,8 +17,7 @@ class ResilienceBeans(
         return ResiliencePolicy(
             timeout = timeoutPolicy(),
             retry = retryPolicy(),
-            rateLimiter = rateLimiterPolicy(),
-            threadPool = threadPoolPolicy()
+            rateLimiter = rateLimiterPolicy()
         )
     }
 
@@ -44,19 +41,12 @@ class ResilienceBeans(
             window = rateLimiterProperties.getWindowDuration()
         )
     }
-
-    private fun threadPoolPolicy(): ThreadPoolPolicy {
-        return ThreadPoolPolicy(
-            keepAliveTime = threadPoolProperties.getKeepAliveTimeDuration()
-        )
-    }
 }
 
 data class ResiliencePolicy(
     val timeout: TimeoutPolicy,
     val retry: RetryPolicy,
-    val rateLimiter: RateLimiterPolicy,
-    val threadPool: ThreadPoolPolicy
+    val rateLimiter: RateLimiterPolicy
 )
 
 data class TimeoutPolicy(
@@ -72,8 +62,4 @@ data class RetryPolicy(
 
 data class RateLimiterPolicy(
     val window: Duration
-)
-
-data class ThreadPoolPolicy(
-    val keepAliveTime: Duration
 )
